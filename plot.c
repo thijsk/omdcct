@@ -594,17 +594,17 @@ int main(int argc, char **argv) {
 		unlink(name);
 	}
 
-	ofd = open(name, O_CREAT | O_LARGEFILE | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	ofd = open(name, O_CREAT | O_LARGEFILE | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 	if(ofd < 0) {
 		printf("Error opening file %s\n", name);
 		exit(1);
 	}
 
 	// pre-allocate space to prevent fragmentation
-	printf("Pre-allocating space for file...");
-	if ( fallocate(ofd, 0, 0, nonces * PLOT_SIZE) < 0 ) {
-		printf("File pre-allocation failed: %d\n", errno);
-		printf("Your filesystem probably does not support it.  Skipping!\n");
+	printf("Pre-allocating space for file (%ld bytes)...\n", (unsigned long int)nonces * PLOT_SIZE);
+	if ( posix_fallocate(ofd, 0, (unsigned long int)nonces * PLOT_SIZE) != 0 ) {
+		printf("File pre-allocation failed.\n");
+		return 1;	
 	} else {
 		printf("Done pre-allocating space.\n");
 	}
