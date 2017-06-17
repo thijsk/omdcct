@@ -1,5 +1,12 @@
 /*
-	Even faster plot generator for burscoin
+	Burst plot generator for Linux that generates optimized plot files
+
+	Optimized plot writing added by:
+	Author: alter3d <alter3d@alter3d.ca>
+	Burst: BURST-WQ52-PUBY-N9WB-6J3DY
+
+	Based on:
+
 	Modified version originally written by Markus Tervooren
 	Added code for mshabal/mshabal256 (SSE4/AVX2 optimizations)
 	by Cerr Janror <cerr.janror@gmail.com> : https://github.com/BurstTools/BurstSoftware.git
@@ -13,12 +20,13 @@
 	Implementation of Shabal is taken from:
 	http://www.shabal.com/?p=198
 
-	Usage: ./plot <public key> <start nonce> <nonces> <stagger size> <threads>
+	Usage: ./plot -k <public key> -x <core> -s <start nonce> -n <nonces> -m <stagger size> -t <threads>
 */
 
 #define USE_MULTI_SHABAL
 
 #define _GNU_SOURCE
+#include <errno.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
@@ -46,6 +54,8 @@
 #define PLOT_SIZE	(4096 * 64)
 #define HASH_SIZE	32
 #define HASH_CAP	4096
+#define SCOOP_SIZE      64
+#define PLOT_SCOOPS     4096
 
 unsigned long long addr = 0;
 unsigned long long startnonce = 0;
@@ -56,7 +66,7 @@ unsigned int noncesperthread;
 unsigned int selecttype = 0;
 unsigned int asyncmode = 0;
 unsigned long long starttime;
-int ofd, run, lastrun;
+int ofd, run, lastrun, thisrun;
 
 char *cache, *wcache, *acache[2];
 char *outputdir = DEFAULTDIR;
@@ -338,9 +348,8 @@ void usage(char **argv) {
 }
 
 void *writecache(void *arguments) {
-	unsigned long long bytes = (unsigned long long) staggersize * PLOT_SIZE;
-	unsigned long long position = 0;
-	int percent;
+	unsigned long long cacheblocksize = staggersize * SCOOP_SIZE;
+	int percent, thisnonce;
 
 	percent = (int)(100 * lastrun / nonces);
 
@@ -352,11 +361,18 @@ void *writecache(void *arguments) {
 		fflush(stdout);
 	}
 
-	do {
-		int b = write(ofd, &wcache[position], bytes > 100000000 ? 100000000 : bytes);	// Dont write more than 100MB at once
-		position += b;
-		bytes -= b;
-	} while(bytes > 0);
+	for ( thisnonce=0; thisnonce<PLOT_SCOOPS; thisnonce++ ) {
+		unsigned long long cacheposition = thisnonce * cacheblocksize;
+		unsigned long long fileposition  = thisnonce * nonces * SCOOP_SIZE + thisrun * SCOOP_SIZE;
+		if ( lseek(ofd, fileposition, SEEK_SET) < 0 ) {
+			printf("\n\nError while lseek()ing in file: %d\n\n", errno);
+			exit(1);
+		}
+                if ( write(ofd, &wcache[cacheposition], cacheblocksize) < 0 ) {
+			printf("\n\nError while writing to file: %d\n\n", errno);
+			exit(1);
+		}
+	}
 
 	unsigned long long ms = getMS() - starttime;
 	
@@ -371,6 +387,15 @@ void *writecache(void *arguments) {
 	fflush(stdout);
 
 	return NULL;
+}
+
+int fileexists(const char *filename) {
+	int fd = open(filename, O_RDONLY);
+	if ( fd < 0 ) {
+		close(fd);
+		return 1;
+	}
+	return 0;
 }
 
 int main(int argc, char **argv) {
@@ -561,13 +586,27 @@ int main(int argc, char **argv) {
 	mkdir(outputdir, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH);
 
 	char name[100];
-	sprintf(name, "%s%llu_%llu_%u_%u", outputdir, addr, startnonce, nonces, staggersize);
+	char finalname[100];
+	sprintf(name, "%s%llu_%llu_%u_%u.plotting", outputdir, addr, startnonce, nonces, nonces);
+	sprintf(finalname, "%s%llu_%llu_%u_%u", outputdir, addr, startnonce, nonces, nonces);
+
+	if ( fileexists(name) ) {
+		unlink(name);
+	}
 
 	ofd = open(name, O_CREAT | O_LARGEFILE | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 	if(ofd < 0) {
 		printf("Error opening file %s\n", name);
-		exit(0);
+		exit(1);
 	}
+
+	// pre-allocate space to prevent fragmentation
+	printf("Pre-allocating space for file...");
+	if ( fallocate(ofd, 0, 0, nonces * PLOT_SIZE) < 0 ) {
+		printf("File allocation failed: %d\n", errno);
+		exit(1);
+	}
+	printf("Done pre-allocating space.\n");
 
 	// Threads:
 	noncesperthread = (unsigned long)(staggersize / threads);
@@ -610,6 +649,7 @@ int main(int argc, char **argv) {
 		starttime=astarttime;
 		if(asyncmode == 1) {
 			if(run > 0) pthread_join(writeworker, NULL);
+			thisrun=run;
 			lastrun=run+staggersize;
 			wcache=cache;
 			if(pthread_create(&writeworker, NULL, writecache, (void *)NULL)) {
@@ -619,6 +659,7 @@ int main(int argc, char **argv) {
 			asyncbuf=1-asyncbuf;			
 			cache=acache[asyncbuf];
 		} else {
+			thisrun=run;
 			lastrun=run+staggersize;
 			if(pthread_create(&writeworker, NULL, writecache, (void *)NULL)) {
 				printf("Error creating thread. Out of memory? Try lower stagger size / less threads\n");
@@ -634,8 +675,17 @@ int main(int argc, char **argv) {
 
 	close(ofd);
 
-	printf("\nFinished plotting.\n");
+	printf("\nFinished plotting; renaming file...\n");
+
+	if ( fileexists(finalname) ) {
+		unlink(finalname);
+	}
+
+	if ( rename(name, finalname) < 0 ) {
+		printf("Error while renaming file: %d\n", errno);
+		return 1;
+	}
+
 	return 0;
 }
-
 

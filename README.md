@@ -1,38 +1,47 @@
-#MDCCT
+#OMDCCT
 =============
-Linux BURST coin plot generator optimized for SSE4 / AVX2<br>
-Speed gain of ~2x using SSE4 core instead of original<br>
-AVX2 not tested (report results!)<br>
+
+This is a BURST coin plotter that generates optimized plot files<br>
+without the need to run an optimizer after plotting.<br>
+
+This plotter ONLY works on Linux as it uses the fallocate() system<br>
+call to pre-allocate space in the file system to minimize fragmentation.<br>
+
+This version was developed by:<br>
+Author: Peter Kristolaitis <alter3d@alter3d.ca><br>
+Donations:  BURST-WQ52-PUBY-N9WB-6J3DY<br>
+
+This code has a long lineage, and is a fork of the [mdcct project by Mirkic7](https://github.com/Mirkic7/mdcct)<br>
+
+Contributors in the lineage include:<br>
 <br>
-Linux BURST coin miner/optimizer (untouched original code)<br>
+Author: Mirkic7 <mirkic7@hotmail.com><br>
+Donations: BURST-RQW7-3HNW-627D-3GAEV<br>
+
 Author: Niksa Franceschi <niksa.franceschi@gmail.com><br>
-Burst for donations: BURST-RQW7-3HNW-627D-3GAEV<br>
+Donations: BURST-RQW7-3HNW-627D-3GAEV<br>
 
-###### Original code 
-Linux miner/plotter/plot optimizer by dcct / Markus Tervooren <info@bchain.info><br>
-Burst: BURST-R5LP-KEL9-UYLG-GFG6T<br>
+Author: dcct / Markus Tervooren <info@bchain.info><br>
+Donations: BURST-R5LP-KEL9-UYLG-GFG6T<br>
 
-Modifed using BurstSoftware code: https://github.com/BurstTools/BurstSoftware <br>
-by Cerr Janror <cerr.janror@gmail.com><br>
-Burst: BURST-LNVN-5M4L-S9KP-H5AAC<br>
+Author: Cerr Janror <cerr.janror@gmail.com><br>
+Donations: BURST-LNVN-5M4L-S9KP-H5AAC<br>
 
 
 ### Installing
-    git clone https://github.com/Mirkic7/mdcct.git
-    cd mdcct
+    git clone https://github.com/alter3d/omdcct
+    cd omdcct
     make
 
-Installation may break on AVX2 code (depending on compiler), but it is separate binary.<br>
-
-Async writer can speed up plotting due to not waiting to write to disk.<br>
-This is especially true with slower disks and larger stagger sizes.<br>
-However, it will use 2x memory.<br>
-
 ### Usage
+###### Notes
+    The file name will have a '.plotting' suffix while the file is incomplete, and then renamed to the
+    standard format if plotting is successful.
+
 ###### For SSE4
     Usage:
 ```bash
-./plot -k KEY [ -x CORE ] [-d DIRECTORY] [-s STARTNONCE] [-n NONCES] [-m STAGGERSIZE] [-t THREADS] -a
+./plot -k KEY [ -x CORE ] [-d DIRECTORY] [-s STARTNONCE] [-n NONCES] [-m STAGGERSIZE] [-t THREADS] [-a]
 ```
      CORE:
        0 - default core
@@ -42,7 +51,7 @@ However, it will use 2x memory.<br>
 ###### For AVX2
     Usage:
 ```bash
-./plotavx2 -k KEY [ -x CORE ] [-d DIRECTORY] [-s STARTNONCE] [-n NONCES] [-m STAGGERSIZE] [-t THREADS] -a
+./plotavx2 -k KEY [ -x CORE ] [-d DIRECTORY] [-s STARTNONCE] [-n NONCES] [-m STAGGERSIZE] [-t THREADS] [-a]
 ```
       CORE:
         0 - default core
@@ -51,3 +60,4 @@ However, it will use 2x memory.<br>
        -a = ASYNC writer mode (will use 2x memory!)
  
 ###### Not specifying -x option will default to original dcct ploter
+
