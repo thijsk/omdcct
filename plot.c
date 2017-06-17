@@ -603,10 +603,11 @@ int main(int argc, char **argv) {
 	// pre-allocate space to prevent fragmentation
 	printf("Pre-allocating space for file...");
 	if ( fallocate(ofd, 0, 0, nonces * PLOT_SIZE) < 0 ) {
-		printf("File allocation failed: %d\n", errno);
-		exit(1);
+		printf("File pre-allocation failed: %d\n", errno);
+		printf("Your filesystem probably does not support it.  Skipping!\n");
+	} else {
+		printf("Done pre-allocating space.\n");
 	}
-	printf("Done pre-allocating space.\n");
 
 	// Threads:
 	noncesperthread = (unsigned long)(staggersize / threads);
