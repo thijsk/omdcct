@@ -24,8 +24,8 @@
 */
 
 #define USE_MULTI_SHABAL
-
 #define _GNU_SOURCE
+#define _LARGEFILE64_SOURCE
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
@@ -66,7 +66,8 @@ unsigned int noncesperthread;
 unsigned int selecttype = 0;
 unsigned int asyncmode = 0;
 unsigned long long starttime;
-int ofd, run, lastrun, thisrun;
+unsigned long long run, lastrun, thisrun;
+int ofd;
 
 char *cache, *wcache, *acache[2];
 char *outputdir = DEFAULTDIR;
@@ -349,7 +350,8 @@ void usage(char **argv) {
 
 void *writecache(void *arguments) {
 	unsigned long long cacheblocksize = staggersize * SCOOP_SIZE;
-	int percent, thisnonce;
+	unsigned long long thisnonce;
+	int percent;
 
 	percent = (int)(100 * lastrun / nonces);
 
@@ -363,8 +365,8 @@ void *writecache(void *arguments) {
 
 	for ( thisnonce=0; thisnonce<PLOT_SCOOPS; thisnonce++ ) {
 		unsigned long long cacheposition = thisnonce * cacheblocksize;
-		unsigned long long fileposition  = thisnonce * nonces * SCOOP_SIZE + thisrun * SCOOP_SIZE;
-		if ( lseek(ofd, fileposition, SEEK_SET) < 0 ) {
+		unsigned long long fileposition  = (unsigned long long)(thisnonce * (unsigned long long)nonces * (unsigned long long)SCOOP_SIZE + thisrun * (unsigned long long)SCOOP_SIZE);
+		if ( lseek64(ofd, fileposition, SEEK_SET) < 0 ) {
 			printf("\n\nError while lseek()ing in file: %d\n\n", errno);
 			exit(1);
 		}

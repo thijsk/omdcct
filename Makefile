@@ -6,7 +6,7 @@ linux32:	plot32
 
 all:		linux64 linux32
 
-dist:		linux64 linux32 win64
+dist:		linux64 linux32
 		rm -f bin/* shabal64.o shabal32.o dcct_miner.tgz
 		mv plot plotavx2 bin
 		tar -czf omdcct_plotter.tgz *
