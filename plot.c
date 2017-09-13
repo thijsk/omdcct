@@ -43,6 +43,7 @@
 #ifdef AVX2
 #include "mshabal256.h"
 #endif
+
 #include "mshabal.h"
 #include "helper.h"
 
@@ -163,6 +164,74 @@ int m256nonce(unsigned long long int addr,
       memmove(&cache[cachepos6 * 64 + (unsigned long long)i * staggersize], &gendata6[i], 64);
       memmove(&cache[cachepos7 * 64 + (unsigned long long)i * staggersize], &gendata7[i], 64);
       memmove(&cache[cachepos8 * 64 + (unsigned long long)i * staggersize], &gendata8[i], 64);
+    }
+
+    return 0;
+}
+#endif
+
+#ifdef AVX
+int mnonce_avx1(unsigned long long int addr,
+    unsigned long long int nonce1, unsigned long long int nonce2, unsigned long long int nonce3, unsigned long long int nonce4,
+    unsigned long long cachepos1, unsigned long long cachepos2, unsigned long long cachepos3, unsigned long long cachepos4)
+{
+    char final1[32], final2[32], final3[32], final4[32];
+    char gendata1[16 + PLOT_SIZE], gendata2[16 + PLOT_SIZE], gendata3[16 + PLOT_SIZE], gendata4[16 + PLOT_SIZE];
+
+    char *xv = (char*)&addr;
+
+    gendata1[PLOT_SIZE] = xv[7]; gendata1[PLOT_SIZE + 1] = xv[6]; gendata1[PLOT_SIZE + 2] = xv[5]; gendata1[PLOT_SIZE + 3] = xv[4];
+    gendata1[PLOT_SIZE + 4] = xv[3]; gendata1[PLOT_SIZE + 5] = xv[2]; gendata1[PLOT_SIZE + 6] = xv[1]; gendata1[PLOT_SIZE + 7] = xv[0];
+
+    for (int i = PLOT_SIZE; i <= PLOT_SIZE + 7; ++i)
+    {
+      gendata2[i] = gendata1[i];
+      gendata3[i] = gendata1[i];
+      gendata4[i] = gendata1[i];
+    }
+
+    SET_NONCE(gendata1, nonce1);
+    SET_NONCE(gendata2, nonce2);
+    SET_NONCE(gendata3, nonce3);
+    SET_NONCE(gendata4, nonce4);
+
+    mshabal_context x;
+    int i, len;
+
+    for (i = PLOT_SIZE; i > 0; i -= HASH_SIZE)
+    {
+
+      avx1_mshabal_init(&x, 256);
+
+      len = PLOT_SIZE + 16 - i;
+      if (len > HASH_CAP)
+        len = HASH_CAP;
+
+      avx1_mshabal(&x, &gendata1[i], &gendata2[i], &gendata3[i], &gendata4[i], len);
+      avx1_mshabal_close(&x, 0, 0, 0, 0, 0, &gendata1[i - HASH_SIZE], &gendata2[i - HASH_SIZE], &gendata3[i - HASH_SIZE], &gendata4[i - HASH_SIZE]);
+
+    }
+
+    avx1_mshabal_init(&x, 256);
+    avx1_mshabal(&x, gendata1, gendata2, gendata3, gendata4, 16 + PLOT_SIZE);
+    avx1_mshabal_close(&x, 0, 0, 0, 0, 0, final1, final2, final3, final4);
+
+    // XOR with final
+    for (i = 0; i < PLOT_SIZE; i++)
+    {
+      gendata1[i] ^= (final1[i % 32]);
+      gendata2[i] ^= (final2[i % 32]);
+      gendata3[i] ^= (final3[i % 32]);
+      gendata4[i] ^= (final4[i % 32]);
+    }
+
+    // Sort them:
+    for (i = 0; i < PLOT_SIZE; i += 64)
+    {
+      memmove(&cache[cachepos1 * 64 + (unsigned long long)i * staggersize], &gendata1[i], 64);
+      memmove(&cache[cachepos2 * 64 + (unsigned long long)i * staggersize], &gendata2[i], 64);
+      memmove(&cache[cachepos3 * 64 + (unsigned long long)i * staggersize], &gendata3[i], 64);
+      memmove(&cache[cachepos4 * 64 + (unsigned long long)i * staggersize], &gendata4[i], 64);
     }
 
     return 0;
@@ -322,6 +391,23 @@ void *work_i(void *x_void_ptr) {
                 } else
                     nonce(addr,(i + n), (unsigned long long)(i - startnonce + n));
 #endif
+#ifdef AVX
+	   } else if (selecttype == 3) {
+           if (n + 4 < noncesperthread)
+	   {
+                    mnonce_avx1(addr,
+                          (i + n + 0), (i + n + 1), (i + n + 2), (i + n + 3),
+                          (unsigned long long)(i - startnonce + n + 0),
+                          (unsigned long long)(i - startnonce + n + 1),
+                          (unsigned long long)(i - startnonce + n + 2),
+                          (unsigned long long)(i - startnonce + n + 3));
+
+                    n += 3;
+	   } else
+                   nonce(addr, (i + n), (unsigned long long)(i - startnonce + n));
+
+
+#endif
             } else {
                 nonce(addr,(i + n), (unsigned long long)(i - startnonce + n));
             }
@@ -343,6 +429,9 @@ void usage(char **argv) {
         printf("     1 - SSE2 core\n");
 #ifdef AVX2
         printf("     2 - AVX2 core\n");
+#endif
+#ifdef AVX
+	printf("     3 - AVX core\n");
 #endif
 	printf("   -a = ASYNC writer mode (will use 2x memory!)\n");
 	exit(-1);
@@ -493,6 +582,9 @@ int main(int argc, char **argv) {
         if(selecttype == 1) printf("Using SSE2 core.\n");
 #ifdef AVX2
         else if(selecttype == 2) printf("Using AVX2 core.\n");
+#endif
+#ifdef AVX
+	else if(selecttype == 3) printf("using AVX core.\n");
 #endif
         else {
 		printf("Using original algorithm.\n");
